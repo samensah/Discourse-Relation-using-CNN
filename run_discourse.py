@@ -96,7 +96,6 @@ def train_and_test(model, X_train, Y_train, X_test, Y_test, nb_epochs=50, batch_
     model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
     model.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=nb_epochs)
     scores = model.evaluate(X_test, Y_test, batch_size=batch_size)
-    print("\n{}\t{}".format(model.metrics_names[0], scores[0]))
     print("\n{}\t{}".format(model.metrics_names[1], scores[1]))
     return scores
 
