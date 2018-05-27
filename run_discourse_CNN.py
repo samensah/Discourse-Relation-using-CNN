@@ -1,109 +1,298 @@
-from keras.layers import Input, Embedding, Dense, merge, Dropout, Reshape, Lambda, \
-    Activation,Flatten,Convolution1D, GlobalMaxPooling1D, GlobalAveragePooling1D, LSTM, Highway, BatchNormalization
+""" Simple implementation of Generative Adversarial Neural Network """
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"]="3"
+import numpy as np
+from keras.layers import Input, Embedding, Dense, Dropout, Reshape, concatenate, Lambda, \
+    Activation,Convolution1D, GlobalMaxPooling1D, GlobalAveragePooling1D
 import keras.backend as K
 from keras.optimizers import Adagrad, SGD, Adam
-import numpy as np
-import pickle
+from keras.utils.generic_utils import Progbar # progress bar
 
-from keras.layers.convolutional import Conv1D
-#from keras.layers.core import Lambda
-from keras.layers.noise import AlphaDropout
+import pickle
 from keras.models import Model
 
 
-" Implicit and Explicit discourse relation using CNN"
-
-seed = 7
-np.random.seed(seed)
-np.set_printoptions(threshold=np.inf)
-    
-def fetch():
-    "load data from pickle file"
-    with open("data_f0-r0.5-w36128-p45.pic", "rb") as f:
-        data = pickle.load(f)
-    return data
-
-data = fetch()
-
-for key in data:
-    "Print keys from data, to know content"
-    print("key: %s " % (key))
-   
 
 
 
-# connective POS is a vector of zeros
-
-  # all keys for each key in data. Example: #print(data['train_data']['arg1'][10])
-# 'arg1':X_word_1, 'arg2':X_word_2, 'arg2plus':X_wordplus_2,
-# 'pos1':X_pos_1, 'pos2':X_pos_2, 'pos2plus':X_posplus_2,
-# 'sense':y, 'sense_all':senses_all, 'conn':ci}
-     
-     
-def concat_arg1_arg2plus(type_of_data = 'train_data'):
-    """Concat either arg1,arg2 or arg1,arg2plus for implicit or explicit rel. resp."""
-    all_arg1 = data[type_of_data]['arg1']
-    all_arg2plus = data[type_of_data]['arg2plus']
-    join_args = [i for i in zip(all_arg1, all_arg2plus)]
-    
-    new_data = []
-    for arg1, arg2plus in join_args:
-        new_data.append(np.concatenate([arg1,arg2plus]))
-    return np.array(new_data)
-
-    
-X_train = concat_arg1_arg2plus(type_of_data = 'train_data')
-Y_train = data['train_data']['sense']
-X_test  = concat_arg1_arg2plus(type_of_data = 'test_data')
-Y_test  = data['test_data']['sense']
-X_dev   = concat_arg1_arg2plus(type_of_data = 'dev_data')
-Y_dev  = data['dev_data']['sense']
 
 
-def max_1d(X):
-    # for max-pool in cnn
-    return K.max(X, axis=1)
+class GAN(object):
+    """ Generative Adversarial Network class """
+    def __init__(self, arg_maxlen=80):
 
+        self.discourse_data_file ="data_f0-r0.5-w36128-p45.pic"
+        self.dataset = self.fetch_data()
+        self._num_class = 11    # num of classes for the classifier
+        
+        # conv params
+        self.arg_maxlen = arg_maxlen
+        self.filter_lengths = [5]
+        self.filter_num = 400
+        self.cnn_dense_size = 300
+        self.cnn_dense_num = 1 # not a deep network just 1 set of layers
+        self.cnn_avgpool = False  # for average pooling, default is max-pool 
+        
+        # optimizers
+        self.adagrad = Adagrad(lr=1e-3, clipnorm=1.0)
+        self.adam    = Adam(lr=1e-3, beta_1=0.5, clipnorm=1.0)
+        self.sgd     = SGD(lr=1e-3, clipnorm=1.0)
+        
+        # for pretrained embedding
+        self.word_WE = self.dataset['word_WE']
+        self._embed_word = Embedding(input_dim=self.word_WE.shape[0],input_length=self.arg_maxlen,weights=[self.word_WE],
+                     output_dim=self.word_WE.shape[1],trainable=False,mask_zero=False)
+        self.pos_size = 100
+        self.max_length = 45
+        self.pos_dim = 100
+        self.pos_dense_size = 50
+        self._embed_pos = Embedding(input_dim=self.pos_size, input_length=self.max_length, output_dim=self.pos_dim,
+                                trainable=True)
+        
+        # training
+        self.epoch = 1
+        self.batch_size = 200
+        self.no_shuffles = 0
+        
+    def fetch_data(self):
+        "load data from pickle file"
+        with open(self.discourse_data_file, "rb") as f:
+            data = pickle.load(f)
+            for key in data['train_data']:
+                "Print keys from data, to know content"
+                print("key: %s " % (key))
+        return data
 
-def cnn_model(data, X_train, weights=None, name='augmented'):
-    "CNN model for either augmented or implicit, just change the name argument"
-    print('ÇNN network'+name)
-    word_WE = data['word_WE'] # pretrained word embedding
-    
-    #activation_value must be relu or tanh
-    main_input = Input(shape=(X_train.shape[1],), dtype='int32', name='main_input')
-    
-    x = Embedding(input_dim = word_WE.shape[0], input_length = X_train.shape[1], weights=[word_WE],
-                             output_dim= word_WE.shape[1], trainable=False, 
-                            mask_zero=False, dropout=0.1)(main_input)
-
-    x = Conv1D(nb_filter=500, filter_length=3, border_mode='valid', activation='relu', subsample_length=1)(x)
-    x = Lambda(max_1d, output_shape=(500,))(x)
-
-    dropout = 0.1
-    if dropout > 0:
-        x = AlphaDropout(dropout)(x)
-    main_loss = Dense(11, activation='softmax', name='main_output')(x)
-    model = Model(input=main_input, output=main_loss)
-    model.summary()
-    return model
-     
 
         
 
-def train_and_test(model, X_train, Y_train, X_test, Y_test, nb_epochs=50, batch_size=10, learning_rate=1e-4):
-    adam = Adam(lr=learning_rate)
-    model.compile(loss='categorical_crossentropy', optimizer=adam, metrics=['accuracy'])
-    model.fit(X_train, Y_train, batch_size=batch_size, nb_epoch=nb_epochs)
-    scores = model.evaluate(X_test, Y_test, batch_size=batch_size)
-    print("\n{}\t{}".format(model.metrics_names[1], scores[1]))
-    return scores
+ # Basic building blocks
+    def build_cnn_pos(self):
+        """Build the first layer of model, from [arg1, arg2(plus)] to [repr] """
+
+        ''' input '''
+        pos1_pos_input = Input(shape=(self.arg_maxlen,), dtype='int32', name='pos1_input')
+        pos2_pos_input = Input(shape=(self.arg_maxlen,), dtype='int32', name='pos2_input')
+        
+        ''' projection '''
+        pos1_embed = self._embed_pos(pos1_pos_input) 
+        pos2_embed = self._embed_pos(pos2_pos_input) 
+        ''' word-level cnn + pooling'''
+
+        pos1_cnns = [Convolution1D(filters= self.filter_num, kernel_size=i,
+                                   padding='same', activation='tanh')(pos1_embed) for i in self.filter_lengths]
+        pos2_cnns = [Convolution1D(filters= self.filter_num, kernel_size=i,
+                                   padding='same', activation='tanh')(pos2_embed) for i in self.filter_lengths]
+
+        if len(pos1_cnns) > 1:
+            pos1_cnn_merge = concatenate(pos1_cnns, axis=-1) 
+            pos2_cnn_merge = concatenate(pos2_cnns, axis=-1) 
+        else:
+            pos1_cnn_merge = pos1_cnns
+            pos2_cnn_merge = pos2_cnns
+        pooling_part = GlobalMaxPooling1D()  
+
+        if self.cnn_avgpool:
+            pooling_part = GlobalAveragePooling1D()
+        pos1_pos_mp = pooling_part(pos1_cnn_merge)
+        pos2_pos_mp = pooling_part(pos2_cnn_merge)
+        ''' Output repr '''
+        merged_vector = concatenate([pos1_pos_mp, pos2_pos_mp], axis=-1)
+        ''' Add another denses ? '''
+        for i in range(self.cnn_dense_num): # make this number positive
+            merged_vector = Dropout(0.4)(merged_vector)      # no dropout for the output layer
+            merged_vector = Dense(self.pos_dense_size, activation='tanh')(merged_vector)
+            
+        input_list = [pos1_pos_input, pos2_pos_input]
+        
+        model = Model(inputs=input_list, outputs = merged_vector)
+        #model.summary()
+        return model
+    
+    
+ # Basic building blocks
+    def build_cnn_word(self):
+        """Build the first layer of model, from [pos1, pos2(plus)] to [repr] """
+
+        ''' input '''
+        arg1_word_input = Input(shape=(self.arg_maxlen,), dtype='int32', name='arg1_word')
+        arg2_word_input = Input(shape=(self.arg_maxlen,), dtype='int32', name='arg2_word')
+        
+        ''' projection '''
+        arg1_word = self._embed_word(arg1_word_input) 
+        arg2_word = self._embed_word(arg2_word_input) 
+        ''' word-level cnn + pooling'''
+
+        arg1_cnns = [Convolution1D(filters= self.filter_num, kernel_size=i,
+                                   padding='same', activation='tanh')(arg1_word) for i in self.filter_lengths]
+        arg2_cnns = [Convolution1D(filters= self.filter_num, kernel_size=i,
+                                   padding='same', activation='tanh')(arg2_word) for i in self.filter_lengths]
+
+
+        if len(arg1_cnns) > 1:
+            arg1_cnn_merge = concatenate(arg1_cnns, axis=-1) 
+            arg2_cnn_merge = concatenate(arg2_cnns, axis=-1) 
+        else:
+            arg1_cnn_merge = arg1_cnns
+            arg2_cnn_merge = arg2_cnns
+        
+        pooling_part = GlobalMaxPooling1D()  
+
+        if self.cnn_avgpool:
+            pooling_part = GlobalAveragePooling1D()
+        arg1_word_mp = pooling_part(arg1_cnn_merge)
+        arg2_word_mp = pooling_part(arg2_cnn_merge)
+        ''' Output repr '''
+        merged_vector = concatenate([arg1_word_mp, arg2_word_mp], axis=-1)
+        ''' Add another denses ? '''
+        for i in range(self.cnn_dense_num): # make this number positive
+            merged_vector = Dropout(0.4)(merged_vector)      # no dropout for the output layer
+            merged_vector = Dense(self.cnn_dense_size, activation='tanh')(merged_vector)
+            
+
+        input_list = [arg1_word_input, arg2_word_input]
+        
+        model = Model(inputs=input_list, outputs=merged_vector)
+        #model.summary()
+        return model
+    
+
+    def _build_joint_classifier(self, block_cnn_word, block_cnn_pos):
+        ''' For word,pos input reps to obtain classes
+        '''
+        block_cnn_word.trainable = True
+        block_cnn_pos.trainable = True   
+        arg1 = Input(shape=(self.arg_maxlen,), dtype='int32')
+        arg2 = Input(shape=(self.arg_maxlen,), dtype='int32')  #arg2(plus)
+        pos1 = Input(shape=(self.arg_maxlen,), dtype='int32')
+        pos2 = Input(shape=(self.arg_maxlen,), dtype='int32')  #arg2(plus)        
+        
+        word_reps = block_cnn_word([arg1, arg2])    # cnn network _build_cnn
+        pos_reps = block_cnn_pos([pos1, pos2])    # cnn network _build_cnn
+        
+        merged_vector = concatenate([word_reps, pos_reps], axis=-1)
+
+        c = Dense(250, activation='tanh')(merged_vector)
+        c = Dropout(0.4)(c)
+        predictions = Dense(self._num_class, activation='softmax')(c)
+        model = Model(inputs=[arg1, arg2, pos1, pos2], outputs=predictions)
+        model.summary()
+        model.compile(loss='categorical_crossentropy', optimizer=self.adagrad, metrics=['acc'])
+        return model
+    
+    def _build_word_classifier(self, block_cnn_word):
+        ''' For word or pos reps to obtain classes
+        '''
+        block_cnn_word.trainable = True
+        arg1 = Input(shape=(self.arg_maxlen,), dtype='int32')
+        arg2 = Input(shape=(self.arg_maxlen,), dtype='int32')  #arg2(plus)   
+        
+        word_reps = block_cnn_word([arg1, arg2])    # cnn network _build_cnn
+        
+        c = Dense(250, activation='tanh')(word_reps)
+        c = Dropout(0.4)(c)
+        predictions = Dense(self._num_class, activation='softmax')(c)
+        model = Model(inputs=[arg1, arg2], outputs=predictions)
+        model.summary()
+        model.compile(loss='categorical_crossentropy', optimizer=self.adagrad, metrics=['acc'])
+        return model
+    
+    @staticmethod # this method cannot be called outside class
+    def _generate_batch(data, batch_size, no_shuffles, progbar):
+        # generate a batch on data = dataset[train_data], dataset[test_data],... 
+        size = len(data['arg1'])
+        # shuffle at first
+        for i in range(no_shuffles):
+            for cur in range(size):
+                target = np.random.randint(cur, size)
+                if target != cur:
+                    for k in data:
+                        tmp = data[k][target].copy()
+                        data[k][target] = data[k][cur]
+                        data[k][cur] = tmp
+        nb_batch = (size+batch_size-1)//batch_size
+        progress_bar = None
+        if(progbar):
+            progress_bar = Progbar(target=nb_batch)
+        for index in range(nb_batch):
+            if(progbar):
+                progress_bar.update(index)
+            begin, end = index*batch_size, min((index+1)*batch_size, size)
+            cur_data = {}
+            for k in data:
+                # k is arg1, arg2, argplus, sense ...
+                cur_data[k] = data[k][begin:end]
+            yield(cur_data)
+    
+    def _prepare_inputs_1(self, data_batched, add_arg2=0, add_arg2plus=1):
+        " Inputs for arg1,arg2(plus)"
+        inputs = []
+        inputs.append(data_batched['arg1'])     # arg1 is always there
+        if add_arg2:
+            inputs.append(data_batched['arg2'])
+        if add_arg2plus:
+            inputs.append(data_batched['arg2plus'])
+        return inputs
+
+    def _prepare_inputs_2(self, data_batched, add_arg2=0, add_pos2=0.):
+        " Inputs for arg1,arg2(plus) and pos1,pos2(plus)" # make all 1 (arg2,pos2) or all 0 (arg2plus, pos2plus)
+        inputs = []
+        inputs.append(data_batched['arg1'])     # arg1 is always there
+        if add_arg2:
+            inputs.append(data_batched['arg2'])
+        else:
+            inputs.append(data_batched['arg2plus'])
+        inputs.append(data_batched['pos1'])
+        if add_pos2:
+            inputs.append(data_batched['pos2'])
+        else:
+            inputs.append(data_batched['pos2plus'])
+        return inputs
+    
+
+    #def fit(self, model, train_data):
+        # Phase 1, train cnn0 and cnn1 for n epochs
+    def fit(self, model, epochs, train_word_only= True):
+        
+        count = 0
+        if train_word_only:
+            for count in range(epochs): 
+                count += 1
+                print('Epoch: '+str(count)+'\n')
+                for data in self._generate_batch(self.dataset['train_data'], self.batch_size, self.no_shuffles, True):
+                    model.train_on_batch(self._prepare_inputs_1(data, add_arg2=0, add_arg2plus=1), [data['sense']])   
+            scores = model.evaluate([self.dataset['test_data']['arg1'], self.dataset['test_data']['arg2plus']], 
+                                    [self.dataset['test_data']['sense']], batch_size=self.batch_size)
+
+            print("\n{}\t{}".format(model.metrics_names, scores))
+            print(scores)
+            return scores
+        else:
+            for count in range(epochs): 
+                count += 1
+                print('Epoch: '+str(count)+'\n')
+                for data in self._generate_batch(self.dataset['train_data'], self.batch_size, self.no_shuffles, True):
+                    model.train_on_batch(self._prepare_inputs_2(data, add_arg2=0, add_pos2=0.), [data['sense']])
+                
+            scores = model.evaluate([self.dataset['test_data']['arg1'], self.dataset['test_data']['arg2plus'],
+                                     self.dataset['test_data']['pos1'], self.dataset['test_data']['pos2plus']],
+                                    
+                                    [self.dataset['test_data']['sense']], batch_size=self.batch_size)
+            print("\n{}\t{}".format(model.metrics_names, scores))
+            print(scores)
+            return scores
 
 
 
-if __name__ == "__main__":
-    model = cnn_model(data, X_train, weights=None)
-    scores = train_and_test(model, X_train, Y_train, X_test, Y_test, nb_epochs=50, batch_size=50, learning_rate=1e-4)
 
+#gan1 = GAN(arg_maxlen=80)
+gan2 = GAN(arg_maxlen=80)
+
+# model for 
+#model = gan1._build_word_classifier(gan1.build_cnn_word())
+#scores = gan1.fit(model, epochs = 30)
+
+model2 = gan2._build_joint_classifier(gan2.build_cnn_word(), gan2.build_cnn_pos())
+scores =gan2.fit(model2, epochs = 30, train_word_only= False) 
 
 
