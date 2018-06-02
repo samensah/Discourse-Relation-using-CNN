@@ -786,6 +786,10 @@ class TrainModel:
         self.load_models('dev')
         #test_result = self._test_all(data_dt['test'])
         Oracle.print(">>>> best of dev and epoch: %s of %s)" % (best_acc, best_epoch))
+
+        self._strategy_list[self.strategy + 1](self.epoch, train_data)
+        result_ori = self._test_one('ori+clf', data_dt[1])
+        Oracle.print(">>>> best of test on ori+clf: %s)" % (result_ori))
         #Oracle.print(">>>> best of test: %s)" % (test_result))
         return history, best_acc, best_epoch
 
