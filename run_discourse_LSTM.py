@@ -84,6 +84,7 @@ def cnn_model(data, X_train, weights=None, name='augmented'):
     
     # Propagate the embeddings through an LSTM layer with 128-dimensional hidden state
     X = LSTM(128, return_sequences=False, dropout = 0.5)(embeddings)
+
     
     main_loss = Dense(11, activation='softmax', name='main_output')(X)
     model = Model(input=main_input, output=main_loss)

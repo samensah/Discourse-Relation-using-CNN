@@ -1,4 +1,11 @@
 """ Simple implementation of Generative Adversarial Neural Network """
+
+# Always add this block of code
+import tensorflow as tf
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+session = tf.Session(config=config)
+
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"]="3"
 import numpy as np
@@ -10,8 +17,6 @@ from keras.optimizers import Adagrad, SGD, Adam
 import pickle
 from keras.utils.generic_utils import Progbar # progress bar
 from keras.models import Model
-from keras.utils import to_categorical
-import tensorflow as tf
 from math import isnan, log
 
 
@@ -149,8 +154,8 @@ class GAN(object):
         self.drop_conn = 0.1 # val 4 condition; to either choose arg2 or arg2plus for training
         
         # training
-        self.epoch = 30
-        self.epoch_firstjoint = 3 # condition to fit ori and gen; epoch < epoch_firstjoint
+        self.epoch = 1
+        self.epoch_firstjoint = 1 # condition to fit ori and gen; epoch < epoch_firstjoint
         self.epoch_firstdiscr = 1 # condition to fit discr; epoch < epoch_firstjoint + epoch_firstdiscr
         self.batch_size = 256
         self.no_shuffles = 0
@@ -556,6 +561,7 @@ class GAN(object):
         # maybe data should be a sample of the whole data
         x = self._test_one('discr', data)
         acc, dloss = x['acc'], x['dloss']
+        print('discr acc:'+str(acc)+',   dloss:'+str(dloss))
         # at which phase (1:high, 0:center, -1:low)
         phase = -100
         if self.thresh_by_acc:
@@ -572,7 +578,7 @@ class GAN(object):
                 phase = 0
             else:
                 phase = -1
-        self.vprint("res: %s, acc: %s, dloss: %s, phase: %s" % (x,acc,dloss,phase))
+        print("res: %s, acc: %s, dloss: %s, phase: %s" % (x,acc,dloss,phase))
         # _special_test(data)     # to see the specific results
         return phase
     
