@@ -369,7 +369,7 @@ class TrainModel:
             [arg1, arg2] to (multi-predict)
         '''
         block_cnn.trainable = True
-        block_classifier.trainable = self.train_clf_later       # this is only for the single trainers in later mode, not for the early on joint trainer; bad design choice
+        block_classifier.trainable = self.train_clf_later  #true     # this is only for the single trainers in later mode, not for the early on joint trainer; bad design choice
         arg1 = Input(shape=(self.arg_maxlen,), dtype='int32')
         arg2 = Input(shape=(self.arg_maxlen,), dtype='int32')
         repr = block_cnn([arg1, arg2])
