@@ -195,6 +195,7 @@ def write():
     train_data = process(file_prefix+train_file, w2i_dic, p2i_dic, True)
     dev_data = process(file_prefix+dev_file, w2i_dic, p2i_dic, False)
     test_data = process(file_prefix+test_file, w2i_dic, p2i_dic, False)
+    #print(len(train_data['sense']), len(dev_data['sense']), len(test_data['sense']))
     # write
     label = "f%s-r%s-w%s-p%s" % (freq, init_range, len(w2i_dic), len(p2i_dic))
     print("4. write file %s"%label)
@@ -208,4 +209,5 @@ def fetch():
     return data
 
 if __name__ == "__main__":
+    #13351 train, 515 dev, 766 test
     write()

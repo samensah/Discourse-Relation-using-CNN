@@ -483,6 +483,7 @@ class TrainModel:
         # from cnn_gen
         repr_gen = block_cnn_gen([arg1, arg2plus])
         _, gen_hidden, _ = block_discr([repr_gen] + discr_inputs_rest)
+
         fm_loss = Lambda(lambda x: K.sum((x[0] - x[1]) ** 2, axis=-1), output_shape=(1,))([ori_hidden, gen_hidden])
         dfm_loss = Lambda(lambda x: K.sum((x[0] - x[1]) ** 2, axis=-1), output_shape=(1,))([repr_ori, repr_gen])
         model = Model(inputs=inps, outputs=[output_multi, output_binary, fm_loss, dfm_loss])
