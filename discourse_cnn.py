@@ -59,6 +59,8 @@ class GAN(object):
             for key in data['train_data']:
                 "Print keys from data, to know content"
                 print("key: %s " % (key))
+            for inst in data['train_data']['sense']:
+                print(inst)
         return data
 
  # Basic building blocks

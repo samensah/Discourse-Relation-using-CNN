@@ -6,18 +6,30 @@ from keras.utils import np_utils, to_categorical
 import pickle
 
 Sense_To_Label = {
-                      'Expansion.Conjunction': 6,
-                      'Expansion.Instantiation': 7,
-                      'Comparison.Concession': 5,
-                      'Contingency.Cause': 2,
-                      'Expansion.List': 10,
-                      'Expansion.Alternative': 9,
+                      'Expansion.Conjunction': 3,
+                      'Expansion.Instantiation': 3,
+                      'Comparison.Concession': 2,
+                      'Contingency.Cause': 1,
+                      'Expansion.List': 3,
+                      'Expansion.Alternative': 3,
                       'Temporal.Asynchronous': 0,
-                      'Temporal.Synchrony': 1,
-                      'Expansion.Restatement': 8,
-                      'Comparison.Contrast': 4,
-                      'Contingency.Pragmatic cause': 3
+                      'Temporal.Synchrony': 0,
+                      'Expansion.Restatement': 3,
+                      'Comparison.Contrast': 2,
+                      'Contingency.Pragmatic cause': 1
                   }
+# 0 Temporal.Asynchronous
+# 1 Temporal.Synchrony
+# 2 Contingency.Cause
+# 3 Contingency.Pragmatic cause
+# 4 Comparison.Contrast
+# 5 Comparison.Concession
+# 6 Expansion.Conjunction
+# 7 Expansion.Instantiation
+# 8 Expansion.Restatement
+# 9 Expansion.Alternative
+# 10 Expansion.List
+
 Rare_Indicator = -1 # indicate the one other than the 11 classes
 Conn_Token = "CONN"
 np.random.seed(12345)
@@ -133,6 +145,7 @@ def process(fileName, w2i_dic, p2i_dic, iftrain, arg_len=80):
     sense = []
     senses_all = []
     conn_index = []
+
     for x in data:
         if iftrain:
             for s in x["Senses"]:
@@ -193,11 +206,11 @@ def write():
     w2i_dic, p2i_dic, word_WE, pos_WE = build_WE(vocab_list, pos_list, embed_file, init_range)
     print("3. process data")
     train_data = process(file_prefix+train_file, w2i_dic, p2i_dic, True)
-    dev_data = process(file_prefix+dev_file, w2i_dic, p2i_dic, False)
-    test_data = process(file_prefix+test_file, w2i_dic, p2i_dic, False)
-    #print(len(train_data['sense']), len(dev_data['sense']), len(test_data['sense']))
+    dev_data   = process(file_prefix+dev_file, w2i_dic, p2i_dic, False)
+    test_data  = process(file_prefix+test_file, w2i_dic, p2i_dic, False)
+    print(len(train_data['sense']), len(dev_data['sense']), len(test_data['sense']))
     # write
-    label = "f%s-r%s-w%s-p%s" % (freq, init_range, len(w2i_dic), len(p2i_dic))
+    label = "f%s-r%s-w%s-p%s-4way" % (freq, init_range, len(w2i_dic), len(p2i_dic))
     print("4. write file %s"%label)
     with open("data_%s.pic" % label, "wb") as f:
         pickle.dump({'w2i_dic':w2i_dic, 'p2i_dic':p2i_dic, 'word_WE':word_WE, 'pos_WE':pos_WE,
