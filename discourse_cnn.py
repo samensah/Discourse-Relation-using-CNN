@@ -2,6 +2,7 @@
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
 
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"]="3"
@@ -19,13 +20,16 @@ from keras.models import Model
 
 class GAN(object):
     """ CNN Class """
-    def __init__(self, arg_maxlen=80):
+    def __init__(self, arg_maxlen=80, _num_class = 11):
 
-        # params for data
-        self.discourse_data_file ="data_f0-r0.5-w36128-p45.pic"
-        #self.discourse_data_file = "data_f0-r0.5-w36128-p45-4way.pic" # for 4-way
+        self._num_class = _num_class    # num of classes for the classifier
+        if _num_class == 11:
+            self.discourse_data_file = "data_f0-r0.5-w36128-p45.pic"
+        elif _num_class == 4:
+            self.discourse_data_file = "data_f0-r0.5-w36128-p45-4way.pic"
+
+        # get dataset
         self.dataset = self.fetch_data()
-        self._num_class = 11    # num of classes for the classifier
         
         # conv params
         self.arg_maxlen = arg_maxlen
@@ -252,7 +256,10 @@ class GAN(object):
         return inputs
 
     # plot confusion matrix
-    def plot_confusion_matrix(self, conf_arr):
+    def plot_confusion_matrix(self, conf_mat_name, true_classes, pred_classes):
+        conf_arr = confusion_matrix(true_classes, pred_classes)
+        print("Confusion Matrix:\n")
+        print(conf_arr)
         norm_conf = []
         for i in conf_arr:
             a = 0
@@ -278,12 +285,23 @@ class GAN(object):
                             verticalalignment='center')
 
         cb = fig.colorbar(res)
-        alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        alphabet =  ['0','1','2','3','4','5','6','7','8','9','10']
         plt.xticks(range(width), alphabet[:width])
         plt.yticks(range(height), alphabet[:height])
-        plt.show()
-        plt.savefig('confusion_matrix.png', format='png')
+        plt.savefig(conf_mat_name+'.png', format='png')
 
+    # get params 4 naming conf matrix
+    def get_conf_name(self, tval_arg2=True, train_word_only=True):
+        no_labels = str(self._num_class)
+        if tval_arg2:
+            type_ = '-imp-'
+        else:
+            type_ = '-aug-'
+        if train_word_only:
+            data_select = '-text-'
+        else:
+            data_select = '-text-pos-'
+        return 'conf_mat-'+no_labels+type_+data_select
 
     def fit(self, model, epochs, tval_arg2=False, train_word_only= True):
         # tval_arg2=False means we include arg2plus(pos2plus)
@@ -302,10 +320,9 @@ class GAN(object):
             pred_classes = pred_probs.argmax(axis=-1)
             true_classes_1hotvecs = self.dataset['test_data']['sense']
             true_classes = [[i for i, e in enumerate(vec) if e != 0][0] for vec in true_classes_1hotvecs]
-            from sklearn.metrics import confusion_matrix
-            conf_arr = confusion_matrix(true_classes, pred_classes)
-            print(conf_arr)
-            self.plot_confusion_matrix(conf_arr)
+            # get confusion matrix and save figure
+            conf_mat_name = self.get_conf_name(tval_arg2, train_word_only)
+            self.plot_confusion_matrix(conf_mat_name, true_classes, pred_classes)
 
             print("\n{}\t{}".format(model.metrics_names, scores))
             print(scores)
@@ -329,14 +346,14 @@ class GAN(object):
 
 
 
-gan1 = GAN(arg_maxlen=80)
-#gan2 = GAN(arg_maxlen=80)
-
 # model for word only
+gan1 = GAN(arg_maxlen=80, _num_class = 11)
+
 model = gan1._build_word_classifier(gan1.build_cnn_word())
-scores = gan1.fit(model, epochs = 1, tval_arg2=True, train_word_only= True)
+scores = gan1.fit(model, epochs = 50, tval_arg2=False, train_word_only= True)
 
 # model for word and pos
+#gan2 = GAN(arg_maxlen=80)
 #model2 = gan2._build_joint_classifier(gan2.build_cnn_word(), gan2.build_cnn_pos())
 #scores = gan1.fit(model, epochs = 1, tval_arg2=False, train_word_only= False)
 
