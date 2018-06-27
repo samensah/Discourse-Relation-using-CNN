@@ -285,7 +285,7 @@ class GAN(object):
                             verticalalignment='center')
 
         cb = fig.colorbar(res)
-        alphabet =  ['0','1','2','3','4','5','6','7','8','9','10']
+        alphabet =  ['0','1','2','3','4','5','6','7','8','9','10' ]
         plt.xticks(range(width), alphabet[:width])
         plt.yticks(range(height), alphabet[:height])
         plt.savefig(conf_mat_name+'.png', format='png')
