@@ -214,7 +214,7 @@ def write():
     print("4. write file %s"%label)
     with open("data_%s.pic" % label, "wb") as f:
         pickle.dump({'w2i_dic':w2i_dic, 'p2i_dic':p2i_dic, 'word_WE':word_WE, 'pos_WE':pos_WE,
-             'train_data':train_data, 'dev_data':dev_data, 'test_data':test_data}, f)
+             'train_data':train_data, 'dev_data':dev_data, 'test_data':test_data},  f)
 
 def fetch():
     with open("data.pic", "rb") as f:
