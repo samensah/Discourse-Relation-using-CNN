@@ -1,4 +1,4 @@
-""" Simple implementation of Generative Adversarial Neural Network """
+""" Simple implementation of CNN for discourse """
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"]="3"
 import numpy as np
@@ -12,22 +12,18 @@ import pickle
 from keras.models import Model
 
 
-
-
-
-
-
 class GAN(object):
     """ Generative Adversarial Network class """
     def __init__(self, arg_maxlen=80):
 
+        # params for data
         self.discourse_data_file ="data_f0-r0.5-w36128-p45.pic"
         self.dataset = self.fetch_data()
         self._num_class = 11    # num of classes for the classifier
         
         # conv params
         self.arg_maxlen = arg_maxlen
-        self.filter_lengths = [5]
+        self.filter_lengths = [2, 3, 5]
         self.filter_num = 400
         self.cnn_dense_size = 300
         self.cnn_dense_num = 1 # not a deep network just 1 set of layers
@@ -42,13 +38,15 @@ class GAN(object):
         self.word_WE = self.dataset['word_WE']
         self._embed_word = Embedding(input_dim=self.word_WE.shape[0],input_length=self.arg_maxlen,weights=[self.word_WE],
                      output_dim=self.word_WE.shape[1],trainable=False,mask_zero=False)
+
+        # parameters of pos
         self.pos_size = 100
         self.max_length = 45
         self.pos_dim = 100
         self.pos_dense_size = 50
         self._embed_pos = Embedding(input_dim=self.pos_size, input_length=self.max_length, output_dim=self.pos_dim,
                                 trainable=True)
-        
+
         # training
         self.epoch = 1
         self.batch_size = 200
@@ -62,9 +60,6 @@ class GAN(object):
                 "Print keys from data, to know content"
                 print("key: %s " % (key))
         return data
-
-
-        
 
  # Basic building blocks
     def build_cnn_pos(self):
@@ -109,10 +104,9 @@ class GAN(object):
         #model.summary()
         return model
     
-    
- # Basic building blocks
+    # Basic building blocks
     def build_cnn_word(self):
-        """Build the first layer of model, from [pos1, pos2(plus)] to [repr] """
+        """Build the cnn model, from [pos1, pos2(plus)] to [repr] """
 
         ''' input '''
         arg1_word_input = Input(shape=(self.arg_maxlen,), dtype='int32', name='arg1_word')
@@ -144,19 +138,19 @@ class GAN(object):
         arg2_word_mp = pooling_part(arg2_cnn_merge)
         ''' Output repr '''
         merged_vector = concatenate([arg1_word_mp, arg2_word_mp], axis=-1)
-        ''' Add another denses ? '''
+        ''' Add dense layers with dropout '''
         for i in range(self.cnn_dense_num): # make this number positive
             merged_vector = Dropout(0.4)(merged_vector)      # no dropout for the output layer
             merged_vector = Dense(self.cnn_dense_size, activation='tanh')(merged_vector)
             
-
+        output_vector = merged_vector
         input_list = [arg1_word_input, arg2_word_input]
         
-        model = Model(inputs=input_list, outputs=merged_vector)
-        #model.summary()
+        model = Model(inputs=input_list, outputs=output_vector)
+        model.summary()
         return model
     
-
+    # Classifier for [word,pos] - perceptron with 1 layer
     def _build_joint_classifier(self, block_cnn_word, block_cnn_pos):
         ''' For word,pos input reps to obtain classes
         '''
@@ -179,7 +173,8 @@ class GAN(object):
         model.summary()
         model.compile(loss='categorical_crossentropy', optimizer=self.adagrad, metrics=['acc'])
         return model
-    
+
+    # Classifier for word - perceptron with 1 layer
     def _build_word_classifier(self, block_cnn_word):
         ''' For word or pos reps to obtain classes
         '''
@@ -223,44 +218,44 @@ class GAN(object):
                 # k is arg1, arg2, argplus, sense ...
                 cur_data[k] = data[k][begin:end]
             yield(cur_data)
-    
-    def _prepare_inputs_1(self, data_batched, add_arg2=0, add_arg2plus=1):
+
+    # get inputs for arg1,arg2(plus) - word
+    def _prepare_inputs_1(self, data_batched, add_arg2=0):
         " Inputs for arg1,arg2(plus)"
         inputs = []
         inputs.append(data_batched['arg1'])     # arg1 is always there
         if add_arg2:
             inputs.append(data_batched['arg2'])
-        if add_arg2plus:
+        else:
             inputs.append(data_batched['arg2plus'])
         return inputs
 
-    def _prepare_inputs_2(self, data_batched, add_arg2=0, add_pos2=0.):
-        " Inputs for arg1,arg2(plus) and pos1,pos2(plus)" # make all 1 (arg2,pos2) or all 0 (arg2plus, pos2plus)
+    # get inputs for arg1,arg2(plus) and pos1,pos2(plus)
+    def _prepare_inputs_2(self, data_batched, add_arg2=0):
+        " Inputs for arg1,arg2(plus) and pos1,pos2(plus)"
         inputs = []
-        inputs.append(data_batched['arg1'])     # arg1 is always there
+        inputs.append(data_batched['arg1'])
         if add_arg2:
             inputs.append(data_batched['arg2'])
-        else:
-            inputs.append(data_batched['arg2plus'])
-        inputs.append(data_batched['pos1'])
-        if add_pos2:
+            inputs.append(data_batched['pos1'])
             inputs.append(data_batched['pos2'])
         else:
+            inputs.append(data_batched['arg2plus'])
+            inputs.append(data_batched['pos1'])
             inputs.append(data_batched['pos2plus'])
         return inputs
     
 
-    #def fit(self, model, train_data):
-        # Phase 1, train cnn0 and cnn1 for n epochs
-    def fit(self, model, epochs, train_word_only= True):
-        
+    def fit(self, model, epochs, tval_arg2=False, train_word_only= True):
+        # tval_arg2=False means we include arg2plus(pos2plus)
+        # train_word_only= True fit only cnn_word model
         count = 0
         if train_word_only:
             for count in range(epochs): 
                 count += 1
                 print('Epoch: '+str(count)+'\n')
                 for data in self._generate_batch(self.dataset['train_data'], self.batch_size, self.no_shuffles, True):
-                    model.train_on_batch(self._prepare_inputs_1(data, add_arg2=0, add_arg2plus=1), [data['sense']])   
+                    model.train_on_batch(self._prepare_inputs_1(data, add_arg2=tval_arg2), [data['sense']])
             scores = model.evaluate([self.dataset['test_data']['arg1'], self.dataset['test_data']['arg2plus']], 
                                     [self.dataset['test_data']['sense']], batch_size=self.batch_size)
 
@@ -272,7 +267,7 @@ class GAN(object):
                 count += 1
                 print('Epoch: '+str(count)+'\n')
                 for data in self._generate_batch(self.dataset['train_data'], self.batch_size, self.no_shuffles, True):
-                    model.train_on_batch(self._prepare_inputs_2(data, add_arg2=0, add_pos2=0.), [data['sense']])
+                    model.train_on_batch(self._prepare_inputs_2(data, add_arg2=tval_arg2), [data['sense']])
                 
             scores = model.evaluate([self.dataset['test_data']['arg1'], self.dataset['test_data']['arg2plus'],
                                      self.dataset['test_data']['pos1'], self.dataset['test_data']['pos2plus']],
@@ -285,14 +280,15 @@ class GAN(object):
 
 
 
-#gan1 = GAN(arg_maxlen=80)
-gan2 = GAN(arg_maxlen=80)
+gan1 = GAN(arg_maxlen=80)
+#gan2 = GAN(arg_maxlen=80)
 
-# model for 
-#model = gan1._build_word_classifier(gan1.build_cnn_word())
-#scores = gan1.fit(model, epochs = 30)
+# model for word only
+model = gan1._build_word_classifier(gan1.build_cnn_word())
+scores = gan1.fit(model, epochs = 1, tval_arg2=False, train_word_only= True)
 
-model2 = gan2._build_joint_classifier(gan2.build_cnn_word(), gan2.build_cnn_pos())
-scores =gan2.fit(model2, epochs = 30, train_word_only= False) 
+# model for word and pos
+#model2 = gan2._build_joint_classifier(gan2.build_cnn_word(), gan2.build_cnn_pos())
+#scores = gan1.fit(model, epochs = 1, tval_arg2=False, train_word_only= False)
 
 
