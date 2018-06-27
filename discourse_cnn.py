@@ -1,4 +1,8 @@
 """ Simple implementation of CNN for discourse """
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"]="3"
 import numpy as np
@@ -8,16 +12,18 @@ import keras.backend as K
 from keras.optimizers import Adagrad, SGD, Adam
 from keras.utils.generic_utils import Progbar # progress bar
 
+
 import pickle
 from keras.models import Model
 
 
 class GAN(object):
-    """ Generative Adversarial Network class """
+    """ CNN Class """
     def __init__(self, arg_maxlen=80):
 
         # params for data
         self.discourse_data_file ="data_f0-r0.5-w36128-p45.pic"
+        #self.discourse_data_file = "data_f0-r0.5-w36128-p45-4way.pic" # for 4-way
         self.dataset = self.fetch_data()
         self._num_class = 11    # num of classes for the classifier
         
@@ -48,7 +54,7 @@ class GAN(object):
                                 trainable=True)
 
         # training
-        self.epoch = 1
+        #self.epoch = 30
         self.batch_size = 200
         self.no_shuffles = 0
         
@@ -59,8 +65,6 @@ class GAN(object):
             for key in data['train_data']:
                 "Print keys from data, to know content"
                 print("key: %s " % (key))
-            for inst in data['train_data']['sense']:
-                print(inst)
         return data
 
  # Basic building blocks
@@ -246,35 +250,78 @@ class GAN(object):
             inputs.append(data_batched['pos1'])
             inputs.append(data_batched['pos2plus'])
         return inputs
-    
+
+    # plot confusion matrix
+    def plot_confusion_matrix(self, conf_arr):
+        norm_conf = []
+        for i in conf_arr:
+            a = 0
+            tmp_arr = []
+            a = sum(i, 0)
+            for j in i:
+                tmp_arr.append(float(j) / float(a))
+            norm_conf.append(tmp_arr)
+
+        fig = plt.figure()
+        plt.clf()
+        ax = fig.add_subplot(111)
+        ax.set_aspect(1)
+        res = ax.imshow(np.array(norm_conf), cmap=plt.cm.jet,
+                        interpolation='nearest')
+
+        width, height = conf_arr.shape
+
+        for x in range(width):
+            for y in range(height):
+                ax.annotate(str(conf_arr[x][y]), xy=(y, x),
+                            horizontalalignment='center',
+                            verticalalignment='center')
+
+        cb = fig.colorbar(res)
+        alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+        plt.xticks(range(width), alphabet[:width])
+        plt.yticks(range(height), alphabet[:height])
+        plt.show()
+        plt.savefig('confusion_matrix.png', format='png')
+
 
     def fit(self, model, epochs, tval_arg2=False, train_word_only= True):
         # tval_arg2=False means we include arg2plus(pos2plus)
         # train_word_only= True fit only cnn_word model
-        count = 0
         if train_word_only:
             for count in range(epochs): 
                 count += 1
                 print('Epoch: '+str(count)+'\n')
                 for data in self._generate_batch(self.dataset['train_data'], self.batch_size, self.no_shuffles, True):
                     model.train_on_batch(self._prepare_inputs_1(data, add_arg2=tval_arg2), [data['sense']])
-            scores = model.evaluate([self.dataset['test_data']['arg1'], self.dataset['test_data']['arg2plus']], 
-                                    [self.dataset['test_data']['sense']], batch_size=self.batch_size)
+            scores = model.evaluate([self.dataset['test_data']['arg1'], self.dataset['test_data']['arg2plus']],
+                                        [self.dataset['test_data']['sense']], batch_size=self.batch_size)
+
+            # get classes of test for confusion matrix
+            pred_probs = model.predict([self.dataset['test_data']['arg1'], self.dataset['test_data']['arg2plus']])
+            pred_classes = pred_probs.argmax(axis=-1)
+            true_classes_1hotvecs = self.dataset['test_data']['sense']
+            true_classes = [[i for i, e in enumerate(vec) if e != 0][0] for vec in true_classes_1hotvecs]
+            from sklearn.metrics import confusion_matrix
+            conf_arr = confusion_matrix(true_classes, pred_classes)
+            print(conf_arr)
+            self.plot_confusion_matrix(conf_arr)
 
             print("\n{}\t{}".format(model.metrics_names, scores))
             print(scores)
             return scores
+
         else:
             for count in range(epochs): 
                 count += 1
                 print('Epoch: '+str(count)+'\n')
                 for data in self._generate_batch(self.dataset['train_data'], self.batch_size, self.no_shuffles, True):
                     model.train_on_batch(self._prepare_inputs_2(data, add_arg2=tval_arg2), [data['sense']])
-                
             scores = model.evaluate([self.dataset['test_data']['arg1'], self.dataset['test_data']['arg2plus'],
-                                     self.dataset['test_data']['pos1'], self.dataset['test_data']['pos2plus']],
-                                    
-                                    [self.dataset['test_data']['sense']], batch_size=self.batch_size)
+                                         self.dataset['test_data']['pos1'], self.dataset['test_data']['pos2plus']],
+                                        [self.dataset['test_data']['sense']], batch_size=self.batch_size)
+
+
             print("\n{}\t{}".format(model.metrics_names, scores))
             print(scores)
             return scores
@@ -287,7 +334,7 @@ gan1 = GAN(arg_maxlen=80)
 
 # model for word only
 model = gan1._build_word_classifier(gan1.build_cnn_word())
-scores = gan1.fit(model, epochs = 1, tval_arg2=False, train_word_only= True)
+scores = gan1.fit(model, epochs = 1, tval_arg2=True, train_word_only= True)
 
 # model for word and pos
 #model2 = gan2._build_joint_classifier(gan2.build_cnn_word(), gan2.build_cnn_pos())
