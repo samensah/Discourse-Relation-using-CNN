@@ -4,6 +4,11 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 
+import tensorflow as tf
+config = tf.ConfigProto()
+config.gpu_options.allow_growth = True
+session = tf.Session(config=config)
+
 import os
 os.environ["TF_CPP_MIN_LOG_LEVEL"]="3"
 import numpy as np
