@@ -1,6 +1,4 @@
-# @Author : bamtercelboo
-# @Datetime : 2018/07/19 22:35
-# @File :
+# @Author : samuel
 
 import torch
 import torch.nn as nn
@@ -16,9 +14,6 @@ from data_utils import Data
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 seed_num = 233
-pad = "<pad>"
-unk = "<unk>"
-
 torch.manual_seed(seed_num)
 random.seed(seed_num)
 
@@ -118,8 +113,13 @@ def train(model):
         print("\n# The {} Epoch, All {} Epochs ! #".format(epoch, epochs))
 
         # train data
-        logit = model(train_data.arg1, train_data.arg2, train_data.pos1, train_data.pos2)
-        loss  = criterion(logit, train_data.sense)
+        arg1 = train_data.arg1.to(device); pos2  = train_data.pos2.to(device);
+        arg2 = train_data.arg2.to(device); sense = train_data.sense.to(device);
+        pos1 = train_data.pos1.to(device) 
+        
+        # Forward pass
+        logit = model(arg1, arg2, pos1, pos2)
+        loss  = criterion(logit, sense)
         print('loss: ', loss.item())
 
         # Backward and optimize
@@ -127,8 +127,8 @@ def train(model):
         loss.backward()
         optimizer.step()
 
-        print('Epoch [{}/{}], Loss: {:.4f}'
-              .format(epoch + 1, epochs, loss.item()))
+    print('Epoch [{}/{}], Loss: {:.4f}'
+          .format(epoch + 1, epochs, loss.item()))
 
 # Test the model
 def test(model):
@@ -137,8 +137,11 @@ def test(model):
     with torch.no_grad():
         correct = 0
         total = 0
-        test_data.arg1.to(device); test_data.arg2.to(device); test_data.pos1.to(device); test_data.pos2.to(device)
-        test_data.sense.to(device)
+        
+        # test data
+        arg1 = train_data.arg1.to(device); pos2  = train_data.pos2.to(device);
+        arg2 = train_data.arg2.to(device); sense = train_data.sense.to(device);
+        pos1 = train_data.pos1.to(device) 
 
         logit = model(test_data.arg1, test_data.arg2, test_data.pos1, test_data.pos2)
 
@@ -151,8 +154,7 @@ def test(model):
 # Save the model checkpoint
 #torch.save(model.state_dict(), 'model.ckpt')
 
-
-model = CNN_Text(data='temporal')
-#train(model)
+model = CNN_Text(data='temporal').to(device)
+train(model)
 test(model)
 
