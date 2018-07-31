@@ -50,12 +50,8 @@ class CNN_Text(nn.Module):
 
         # "using narrow convolution"
         self.shared_cnn = [nn.Conv2d(in_channels=Ci, out_channels=Co, kernel_size=(K, self.word_ndims+self.pos_ndims), bias=True) for K in Ks]
-
-        # for cnn cuda
-        args_cud = False
-        if args_cud is True:
-            for conv in self.shared_cnn:
-                conv = conv.cuda()
+        for conv in self.shared_cnn:
+            conv = conv.to(device)
 
         # dropout
         self.dropout = nn.Dropout(0.2)
@@ -139,11 +135,11 @@ def test(model):
         total = 0
         
         # test data
-        arg1 = train_data.arg1.to(device); pos2  = train_data.pos2.to(device);
-        arg2 = train_data.arg2.to(device); sense = train_data.sense.to(device);
-        pos1 = train_data.pos1.to(device) 
+        arg1 = test_data.arg1.to(device); pos2  = test_data.pos2.to(device);
+        arg2 = test_data.arg2.to(device); sense = test_data.sense.to(device);
+        pos1 = test_data.pos1.to(device) 
 
-        logit = model(test_data.arg1, test_data.arg2, test_data.pos1, test_data.pos2)
+        logit = model(arg1, arg2, pos1, pos2)
 
         _, predicted = torch.max(logit.data, 1)
         total += test_data.sense.size(0)
