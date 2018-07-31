@@ -9,6 +9,7 @@ import random
 import pickle
 import torch.nn.init as init
 from data_utils import Data
+from sklearn.metrics import f1_score
 
 # Device configuration
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -142,10 +143,16 @@ def test(model):
         logit = model(arg1, arg2, pos1, pos2)
 
         _, predicted = torch.max(logit.data, 1)
-        total += test_data.sense.size(0)
-        correct += (predicted == test_data.sense).sum().item()
-
-    print('Test Accuracy of the model: {} %'.format(100 * correct / total))
+        total += sense.size(0)
+        correct += (predicted == sense).sum().item()
+        
+        y_pred = predicted.numpy()
+        y_true = labels_numpy.numpy()
+        
+        f1_score = f1_score(y_true, y_pred, average=None)
+        
+        print(f1_score)
+        print('Test Accuracy of the model: {} %'.format(100 * correct / total))
 
 # Save the model checkpoint
 #torch.save(model.state_dict(), 'model.ckpt')
