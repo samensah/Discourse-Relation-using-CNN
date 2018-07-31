@@ -149,9 +149,9 @@ def test(model):
         y_pred = predicted.numpy()
         y_true = labels_numpy.numpy()
         
-        f1_score = f1_score(y_true, y_pred, average=None)
+        fscore = f1_score(y_true, y_pred, average=None)
         
-        print(f1_score)
+        print(fscore)
         print('Test Accuracy of the model: {} %'.format(100 * correct / total))
 
 # Save the model checkpoint
