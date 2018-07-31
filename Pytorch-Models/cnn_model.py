@@ -147,7 +147,7 @@ def test(model):
         correct += (predicted == sense).sum().item()
         
         y_pred = predicted.numpy()
-        y_true = labels_numpy.numpy()
+        y_true = sense.numpy()
         
         fscore = f1_score(y_true, y_pred, average=None)
         
