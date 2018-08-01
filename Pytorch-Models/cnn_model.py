@@ -32,16 +32,16 @@ class CNN_Text(nn.Module):
         self.dev_data   = Data(datafile=data + '_data.pic', which_data='train_data', shuffle=False)
         self.test_data  = Data(datafile=data + '_data.pic', which_data='train_data', shuffle=False)
 
-        C = 2   #num of classes
-        Ci = 1
-        Co = 1024
-        Ks = [2,3,5]
+        C = 2        #num of classes
+        Ci = 1       #1 for NLP, 3 for RGB
+        Co = 1024    #no. of filters
+        Ks = [2,3,5] #window size
 
         self.word_ndims = 300
         self.pos_ndims  = 50
 
-        self.word_WE  = torch.FloatTensor(self.train_data.word_WE)
-        self.pos_WE   = torch.FloatTensor(self.train_data.pos_WE)
+        self.word_WE  = self.train_data.word_WE
+        self.pos_WE   = self.train_data.pos_WE
 
         # Embedding functions
         self.WE_embed = nn.Embedding.from_pretrained(self.word_WE)
@@ -55,10 +55,10 @@ class CNN_Text(nn.Module):
             conv = conv.to(device)
 
         # dropout
-        self.dropout = nn.Dropout(0.2)
+        self.dropout       = nn.Dropout(0.2)
         self.dropout_embed = nn.Dropout(0.2)
 
-        in_features = 2 * len(Ks) * Co  #features from convs for both Arg1, Arg2
+        in_features = 2 * len(Ks) * Co  #no of features from convs from concat of Arg1, Arg2
         self.fc = nn.Linear(in_features=in_features, out_features=C)
 
 
@@ -95,7 +95,7 @@ class CNN_Text(nn.Module):
         return logit
 
 # Train the model
-def train(model):
+def train(model, epochs=2):
     train_data = model.train_data
     dev_data   = model.dev_data
     test_data  = model.test_data
@@ -104,7 +104,6 @@ def train(model):
     criterion = nn.CrossEntropyLoss()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.001, weight_decay=1e-8)
 
-    epochs = 2
     model.train()
     for epoch in range(1, epochs):
         print("\n# The {} Epoch, All {} Epochs ! #".format(epoch, epochs))
@@ -124,8 +123,7 @@ def train(model):
         loss.backward()
         optimizer.step()
 
-    print('Epoch [{}/{}], Loss: {:.4f}'
-          .format(epoch + 1, epochs, loss.item()))
+    print('Epoch [{}/{}], Loss: {:.4f}'.format(epoch + 1, epochs, loss.item()))
 
 # Test the model
 def test(model):
@@ -158,6 +156,6 @@ def test(model):
 #torch.save(model.state_dict(), 'model.ckpt')
 
 model = CNN_Text(data='temporal').to(device)
-train(model)
+train(model, epochs=2)
 test(model)
 
