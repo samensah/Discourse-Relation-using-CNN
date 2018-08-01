@@ -1,14 +1,10 @@
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch.autograd import Variable
 import numpy as np
 import random
 import pickle
 import torch.nn.init as init
-
-import torchvision
-import torchvision.transforms as transforms
 
 seed_num = 233
 
@@ -63,7 +59,7 @@ class Data(object):
             self.sense    = Variable(torch.from_numpy(sense[perm]).long())
 
         else:
-            print('which_data is either "train_data", "dev_data" or "test_data"')
+            raise ValueError('which_data is either "train_data", "dev_data" or "test_data"')
 
 
 #train_data = Data(datafile='temporal_data.pic', which_data='train_data', shuffle=False)
