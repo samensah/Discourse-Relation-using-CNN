@@ -1,4 +1,4 @@
-# author: samensah
+#author: samensah
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,12 +9,12 @@ if torch.cuda.is_available():
 else:
     torch.manual_seed(0)
 
-class GRN(nn.Module):
+class GatedRelevanceNetwork(nn.Module):
     """"Gated Relevance Network"""
-    def __init__(self, output_dim, input_dim):
+    def __init__(self, output_dim, embed_dim):
         # output_dim is the number of k slices
         self.output_dim = output_dim
-        self.emb_dim    = input_dim
+        self.emb_dim    = embed_dim
         self.activation = nn.functional.tanh  # The f function in the formula
         self.gate_activation = nn.functional.sigmoid
 
@@ -25,12 +25,13 @@ class GRN(nn.Module):
         self.bg = Variable(torch.rand(self.output_dim))                              #bias gate weights
         self.b  = Variable(torch.rand(self.output_dim))                              #general bias
         self.u  = Variable(torch.rand(self.output_dim, 1))                           #channel weights
-        super(GRN, self).__init__()
+        super(GatedRelevanceNetwork, self).__init__()
 
 
     def forward(self, arg1, arg2):
         # Get the batch size
         batch_size = arg1.size()[0]
+
         # Usually len1 = len2 = max_seq_length
         # emb_dim = self.emb_dim
         _, len1, emb_dim = arg1.size()
@@ -53,24 +54,25 @@ class GRN(nn.Module):
         e = torch.cat([ne1, ne2], -1)
 
         # Single Layer Network
-        sln = self.activation(torch.einsum('bxy,yk->bxk', (e, self.Wd)))
+        sln = self.activation(torch.einsum('bxy,yk->bxk', (e.clone(), self.Wd)))
         sln = sln.view(batch_size, len1, len2, self.output_dim)
 
         # Gate
-        g = self.gate_activation(torch.einsum('bxy,yk->bxk', (e, self.Wg)) + self.bg)
+        g = self.gate_activation(torch.einsum('bxy,yk->bxk', (e.clone(), self.Wg)) + self.bg)
         g = g.view(batch_size, len1, len2, self.output_dim)
 
         # Gated Relevance Network
         # s = torch.einsum('bixy,yk->bixk', (g*btp + (1-g)*sln + b, u)).view(batch_size, len1, len2)
+        # Output shape: (batch_size, max_seq_length, max_seq_length, 1)
         s = torch.einsum('bixy,yk->bixk', (g * btp + (1 - g) * sln + self.b, self.u))
+        s1, s2, s3, s4 = s.size()
+        s = s.view(s1, s2, s3 * s4)
 
         return s
 
-#import pickle
-#import numpy as np
-#dataset = pickle.load(open("data/temporal_data.pic", 'rb'))
-#model = GRN(output_dim=10, input_dim=5)
-#arg1 = torch.Tensor(np.array([[[1,2,3,4,5],[2,3,4,5,6],[3,4,5,6,7]], [[1,2,3,4,5],[2,3,4,5,6],[3,4,5,6,7]]]))
-#arg2 = torch.Tensor(np.array([[[3,2,0.5,14,15],[21,13,0,0,1],[0,1,0,0,2]], [[1,2,3,4,5],[2,3,4,5,6],[3,4,5,6,7]]]))
+
+#model = GatedRelevanceNetwork(output_dim=10, embed_dim=5)
+#arg1_embed = torch.Tensor([[[1,2,3,4,5],[2,3,4,5,6]], [[1,2,3,4,5],[3,4,5,6,7]]]) # using this to represent the embedding as well
+#arg2_embed = torch.Tensor([[[1,2,3,4,5],[2,3,4,5,6]], [[1,2,3,4,5],[2,3,4,5,6]]])
 #print(model)
-#print(model(arg1, arg2))
+#print(model(arg1_embed, arg2_embed))
