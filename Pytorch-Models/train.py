@@ -11,7 +11,7 @@ import warnings
 warnings.filterwarnings('always')
 
 
-def _generate_batch(data, batch_size=200, no_shuffles=1):
+def _generate_batch(data, batch_size=200, no_shuffles=2):
     # generate a batch on data = dataset[train_data], dataset[test_data],...
     size = len(data['arg1'])
     # shuffle at first
@@ -84,9 +84,15 @@ def train(train_data, test_data, batch_size, model, args):
                 # calculate accuracy
                 corrects = (torch.max(logit, 1)[1].view(target.size()).data == target.data).sum()
                 accuracy = 100.0 * corrects/batch_size
+                
                 # calculate fscore
-                logits = torch.max(logit, 1)[1].numpy()
-                fscore = f1_score(target.numpy(), logits, average='macro')
+                if args.cuda:
+                	logits = torch.max(logit, 1)[1].cpu()
+                	target = target.cpu()
+                	fscore = f1_score(target.numpy(), logits.numpy(), average='macro')
+                else:
+                    logits = torch.max(logit, 1)[1].numpy()
+                    fscore = f1_score(target.numpy(), logits, average='macro')            	
 
                 # write results
                 sys.stdout.write(
@@ -132,8 +138,13 @@ def eval(test_data, model, args):
     loss  = F.cross_entropy(logit, target, size_average=False)
 
     # calculate fscore
-    logits = torch.max(logit, 1)[1].numpy()
-    fscore = f1_score(target.numpy(), logits, average='macro')
+    if args.cuda:
+    	logits = torch.max(logit, 1)[1].cpu()
+    	target = target.cpu()
+    	fscore = f1_score(target.numpy(), logits.numpy(), average='macro')
+    else:
+        logits = torch.max(logit, 1)[1].numpy()
+        fscore = f1_score(target.numpy(), logits, average='macro')  
 
     print('\nEvaluation - loss: {:.6f} -  fscore: {:.4f} \n'.format(loss.item(), fscore))
     return fscore
